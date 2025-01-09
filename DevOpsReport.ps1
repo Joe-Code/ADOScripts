@@ -1,6 +1,6 @@
 # Set your organization and PAT here
-$organization = "jfitzgerald0964"
-$personalAccessToken = "DAoyApOjBVz0SicixYZdq5JlkvpXISFKRHltXMoxjhifOHAHR0UAJQQJ99BAACAAAAA3WEulAAASAZDOoDGu"
+$organization = ""
+$personalAccessToken = ""
 
 # Base URLs for Azure DevOps APIs
 $baseUrl = "https://dev.azure.com/$organization/_apis/"
