@@ -1,10 +1,17 @@
+# Install the ImportExcel module if not already installed
+if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
+    Install-Module -Name ImportExcel -Scope CurrentUser -Force
+}
+# Import the ImportExcel module
+Import-Module -Name ImportExcel
+
 # Set your organization and PAT here
 $organization = ""
 $personalAccessToken = ""
 
 # Base URLs for Azure DevOps APIs
 $baseUrl = "https://dev.azure.com/$organization/_apis/"
-$graphApiUrl = "https://vssps.dev.azure.com/$organization/_apis/"
+# $graphApiUrl = "https://vssps.dev.azure.com/$organization/_apis/"
 
 # Function to create an Authorization Header using the PAT
 function Get-AuthorizationHeader {
@@ -15,18 +22,18 @@ function Get-AuthorizationHeader {
 # Function to get all projects
 function Get-Projects {
     $projects = @()
-    $url = "$baseUrl/projects?api-version=6.0&`$top=4"
+    $url = "$baseUrl/projects?api-version=6.0&`$top=100"
     $headers = Get-AuthorizationHeader
 
     do {
-        Write-Host "Request URL: $url"
+        # Write-Host "Request URL: $url"
 
         try {
             $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get -ResponseHeadersVariable responseHeaders
             $projects += $response.value
 
             if ($responseHeaders.'x-ms-continuationtoken') {
-                $url = "$baseUrl/projects?continuationToken=$($responseHeaders.'x-ms-continuationtoken')&api-version=6.0&`$top=4"
+                $url = "$baseUrl/projects?continuationToken=$($responseHeaders.'x-ms-continuationtoken')&api-version=6.0&`$top=100"
             } else {
                 $url = $null
             }
@@ -39,15 +46,14 @@ function Get-Projects {
     return $projects
 }
 
-# Function to get project descriptor
-function Get-ProjectDescriptor {
+# Function to get teams in a project
+function Get-Teams {
     param ($projectId)
 
-    # $url = "$graphApiUrl/graph/descriptors/`$projectId?api-version=6.0-preview.1"
-    $url = $graphApiUrl + "graph/descriptors/" + $projectId + "?api-version=6.0-preview.1"
+    $url = $baseUrl + "projects/" + $projectId + "/teams?api-version=7.1"
     $headers = Get-AuthorizationHeader
 
-    Write-Host "Request URL: $url"
+    # Write-Host "Request URL: $url"
 
     try {
         $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
@@ -58,37 +64,18 @@ function Get-ProjectDescriptor {
     }
 }
 
-# Function to get project memberships using descriptor
-function Get-ProjectMemberships {
-    param ($projectDescriptor)
+# Function to get team members
+function Get-TeamMembers {
+    param ($projectId, $teamId)
 
-    $url = $graphApiUrl + "graph/memberships/" + $projectDescriptor + "?api-version=6.0-preview.1"
+    $url = $baseUrl + "projects/" + $projectId + "/teams/" + $teamId + "/members?api-version=7.1"
     $headers = Get-AuthorizationHeader
 
-    Write-Host "Request URL: $url"
+    # Write-Host "Request URL: $url"
 
     try {
         $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
         return $response.value
-    } catch {
-        Write-Host "Error: $_"
-        return $null
-    }
-}
-
-# Function to get user details by user descriptor
-function Get-UserDetails {
-    param ($userDescriptor)
-
-    $url = "$graphApiUrl/graph/users/$userDescriptor?api-version=7.1-preview.1"
-    $headers = Get-AuthorizationHeader
-
-    Write-Host "Request URL: $url"
-    Write-Host "Headers: $headers"
-
-    try {
-        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
-        return $response
     } catch {
         Write-Host "Error: $_"
         return $null
@@ -107,42 +94,47 @@ if ($null -ne $projects) {
 
         Write-Host "Project: $projectName, Last Updated: $lastUpdated"
 
-        # Get the project descriptor
-        $projectDescriptor = Get-ProjectDescriptor -projectId $projectId
-        Write-Host "Project Descriptor: $projectDescriptor"
+        # Get the teams in the project
+        $teams = Get-Teams -projectId $projectId
+        if ($null -ne $teams) {
+            foreach ($team in $teams) {
+                $teamName = $team.name
+                Write-Host "    - Team: $teamName"
 
-        if ($null -ne $projectDescriptor) {
-            # Get the project memberships using the descriptor
-            $memberships = Get-ProjectMemberships -projectDescriptor $projectDescriptor
+                # Get the team members
+                $members = Get-TeamMembers -projectId $projectId -teamId $team.id
+                if ($null -ne $members) {
+                    foreach ($member in $members) {
+                        $displayName = $member.identity.displayName
+                        $uniqueName = $member.identity.uniqueName
+                        $isTeamAdmin = $member.isTeamAdmin
+                        Write-Host "        - Member: $displayName, Unique Name: $uniqueName, Team Admin: $isTeamAdmin"
 
-            foreach ($membership in $memberships) {
-                $userDescriptor = $membership.descriptor
-
-                # Get user details using the user descriptor
-                $user = Get-UserDetails -userDescriptor $userDescriptor
-
-                if ($user) {
-                    $displayName = $user.displayName
-                    $email = $user.principalName
-                    Write-Host "- User: $displayName, Email: $email"
-
-                    # Add the result to the array
-                    $results += [PSCustomObject]@{
-                        Project      = $projectName
-                        LastUpdated  = $lastUpdated
-                        User         = $displayName
-                        Email        = $email
+                        # Add the result to the array
+                        $results += [PSCustomObject]@{
+                            Project      = $projectName
+                            LastUpdated  = $lastUpdated
+                            Team         = $teamName
+                            DisplayName  = $displayName
+                            UniqueName   = $uniqueName
+                            TeamAdmin    = $isTeamAdmin
+                        }
                     }
-                } else {
-                    Write-Host "- No user information found for descriptor $userDescriptor"
+                }
+                else {
+                    Write-Host "    - No members found for team $teamName"
                 }
             }
-        } else {
-            Write-Host "- No project descriptor found for project $projectName"
+        }
+        else {
+            Write-Host "    - No teams found for project $projectName"
         }
     }
 
     # Export results to Excel
+    $results | Export-Csv -Path "output.csv" -NoTypeInformation
+    
+    
     # $results | Export-Excel -Path "output.xlsx" -AutoSize
 } else {
     Write-Host "No projects found."
