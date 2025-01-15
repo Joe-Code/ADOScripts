@@ -82,10 +82,33 @@ function Get-TeamMembers {
     }
 }
 
+# Function to add results to the $results array
+function Add-ToResults {
+    param (
+        [string]$projectName,
+        [string]$lastUpdated,
+        [string]$teamName,
+        [string]$displayName,
+        [string]$uniqueName,
+        [string]$isTeamAdmin
+    )
+    $results += [PSCustomObject]@{
+        Project      = $projectName
+        LastUpdated  = $lastUpdated
+        Team         = $teamName
+        DisplayName  = $displayName
+        UniqueName   = $uniqueName
+        TeamAdmin    = $isTeamAdmin
+    }
+}
+
 # Main Script Execution
 $projects = Get-Projects
 if ($null -ne $projects) {
     $results = @()
+
+    Write-Host "Total Projects: $($projects.Count)"
+    Write-Host "Projects and Teams:"
 
     foreach ($project in $projects) {
         $projectId = $project.id
@@ -111,23 +134,20 @@ if ($null -ne $projects) {
                         Write-Host "        - Member: $displayName, Unique Name: $uniqueName, Team Admin: $isTeamAdmin"
 
                         # Add the result to the array
-                        $results += [PSCustomObject]@{
-                            Project      = $projectName
-                            LastUpdated  = $lastUpdated
-                            Team         = $teamName
-                            DisplayName  = $displayName
-                            UniqueName   = $uniqueName
-                            TeamAdmin    = $isTeamAdmin
-                        }
+                        Add-ToResults -projectName $projectName -lastUpdated $lastUpdated -teamName $teamName -displayName $displayName -uniqueName $uniqueName -isTeamAdmin $isTeamAdmin
                     }
                 }
                 else {
                     Write-Host "    - No members found for team $teamName"
+                    # Add the team without members to the results
+                    Add-ToResults -projectName $projectName -lastUpdated $lastUpdated -teamName $teamName -displayName "No members" -uniqueName "N/A" -isTeamAdmin "N/A"
                 }
             }
         }
         else {
             Write-Host "    - No teams found for project $projectName"
+            # Add the project without teams to the results
+            Add-ToResults -projectName $projectName -lastUpdated $lastUpdated -teamName "No teams" -displayName "N/A" -uniqueName "N/A" -isTeamAdmin "N/A"
         }
     }
 
