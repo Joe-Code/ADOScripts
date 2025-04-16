@@ -1,2 +1,2 @@
 # ADOScripts
-Scripts that us the ADO REST API.
+Scripts that uses the ADO REST API.
